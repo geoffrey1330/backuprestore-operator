@@ -1,7 +1,7 @@
 # backuprestore-operator
 
 ## Description
-// Kubernetes Operator that automates the backup and restore process of databases running in Kubernetes pods.
+Kubernetes Operator that automates the backup and restore process of databases running in Kubernetes pods.
 
 ## Getting Started
 You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.
