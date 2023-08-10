@@ -195,13 +195,15 @@ func performRestore(backupRestore *backuprestorev1alpha1.BackupRestore) error {
 	}
 
 	// Restore the backup content to the targetPod
-	restoreErr := restoreDatabase(getObjectOutput.Body, backupRestore.Spec.TargetPod)
+	targetPod := backupRestore.Spec.TargetPod
+
+	restoreErr := restoreDatabase(getObjectOutput.Body, targetPod)
 
 	if restoreErr != nil {
 		return fmt.Errorf("failed to restore database: %v", restoreErr)
 	}
 
-	fmt.Printf("Restored backup from S3: %s/%s to Pod: %s\n", backupBucketName, latestBackupKey, backupRestore.Spec.TargetPod)
+	fmt.Printf("Restored backup from S3: %s/%s to Pod: %s\n", backupBucketName, latestBackupKey, targetPod)
 	return nil
 }
 
