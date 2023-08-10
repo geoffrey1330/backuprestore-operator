@@ -28,11 +28,11 @@ type BackupRestoreSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	DatabaseType     string `json:"databaseType"`
-	SourcePod        string `json:"sourcePod"`
-	TargetPod        string `json:"targetPod"`
-	BackupSchedule   string `json:"backupSchedule"`
-	RetentionPolicy  string `json:"retentionPolicy"`
+	DatabaseType    string `json:"databaseType"`
+	SourcePod       string `json:"sourcePod"`
+	TargetPod       string `json:"targetPod"`
+	BackupSchedule  string `json:"backupSchedule"`
+	RetentionPolicy string `json:"retentionPolicy"`
 }
 
 // BackupRestoreStatus defines the observed state of BackupRestore

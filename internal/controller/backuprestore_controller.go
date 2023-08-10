@@ -22,6 +22,8 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -115,21 +117,39 @@ func performBackup(backupRestore *backuprestorev1alpha1.BackupRestore) error {
 	}))
 	svc := s3.New(sess)
 
-	// Create a backup file (mocking the content)
-	backupContent := []byte("Mock backup content")
+	// Generate a unique backup filename
 	backupFileName := fmt.Sprintf("backup_%s.sql", time.Now().Format("20060102150405"))
 	backupBucketName := "your-backup-bucket" // Update with your actual S3 bucket name
 
-	_, err := svc.PutObject(&s3.PutObjectInput{
-		Body:   bytes.NewReader(backupContent),
+	// Execute a command in the sourcePod to create a backup file
+	sourcePod := backupRestore.Spec.SourcePod
+
+	cmd := exec.Command("kubectl", "exec", sourcePod, "--", "sh", "-c", "mysqldump -u user -pPASSWORD dbname > /tmp/"+backupFileName)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to execute backup command: %v, stderr: %s", err, stderr.String())
+	}
+
+	// Upload the backup file to S3
+	backupFilePath := "/tmp/" + backupFileName
+	backupFile, err := os.Open(backupFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to open backup file: %v", err)
+	}
+	defer backupFile.Close()
+
+	_, err = svc.PutObject(&s3.PutObjectInput{
+		Body:   backupFile,
 		Bucket: aws.String(backupBucketName),
 		Key:    aws.String(backupFileName),
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to upload backup to S3: %v", err)
 	}
 
 	fmt.Printf("Backup saved to S3: %s/%s\n", backupBucketName, backupFileName)
+
 	return nil
 }
 
@@ -174,34 +194,62 @@ func performRestore(backupRestore *backuprestorev1alpha1.BackupRestore) error {
 		return err
 	}
 
-	// Restore the backup content to the database
-	restoreErr := restoreDatabase(getObjectOutput.Body)
+	// Restore the backup content to the targetPod
+	restoreErr := restoreDatabase(getObjectOutput.Body, backupRestore.Spec.TargetPod)
 
 	if restoreErr != nil {
 		return fmt.Errorf("failed to restore database: %v", restoreErr)
 	}
 
-	fmt.Printf("Restored backup from S3: %s/%s\n", backupBucketName, latestBackupKey)
+	fmt.Printf("Restored backup from S3: %s/%s to Pod: %s\n", backupBucketName, latestBackupKey, backupRestore.Spec.TargetPod)
 	return nil
 }
 
-func restoreDatabase(backupContent io.ReadCloser) error {
-	// Mock implementation for database restore
-	// You should replace this with your actual database restore logic
-
-	// For example, assuming you're restoring a MySQL database
-	// Connect to the MySQL database
-	db, err := sql.Open("mysql", "user:password@tcp(host:port)/database")
+func restoreDatabase(backupContent io.ReadCloser, targetPod string) error {
+	// Step 1: Connect to the targetPod's MySQL database
+	db, err := sql.Open("mysql", "user=root password=your-password dbname=your-database host="+targetPod+" port=3306")
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	// Restore the database from the backup content
-	_, err = db.Exec("source /path/to/backup.sql")
+	// Step 2: Create a temporary backup file on the local machine
+	backupFilePath := "/tmp/backup.sql"
+	backupFile, err := os.Create(backupFilePath)
+	if err != nil {
+		return err
+	}
+	defer backupFile.Close()
+
+	// Step 3: Write the backup content to the temporary file
+	_, err = io.Copy(backupFile, backupContent)
 	if err != nil {
 		return err
 	}
 
+	// Step 4: Execute the database restore command on the targetPod
+	restoreCmd := exec.Command("kubectl", "cp", backupFilePath, targetPod+":/tmp/backup.sql")
+	restoreCmd.Stdout = os.Stdout
+	restoreCmd.Stderr = os.Stderr
+
+	err = restoreCmd.Run()
+	if err != nil {
+		return err
+	}
+
+	// Step 5: Connect to the targetPod's MySQL database again
+	db, err = sql.Open("mysql", "user=root password=your-password dbname=your-database host="+targetPod+" port=3306")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// Step 6: Execute the database restore command on the targetPod
+	_, err = db.Exec("source /tmp/backup.sql")
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Database restored on Pod: %s\n", targetPod)
 	return nil
 }
