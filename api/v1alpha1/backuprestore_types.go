@@ -31,7 +31,7 @@ type BackupRestoreSpec struct {
 	DatabaseType    string `json:"databaseType"`
 	SourcePod       string `json:"sourcePod"`
 	TargetPod       string `json:"targetPod"`
-	BackupSchedule  string `json:"backupSchedule"`
+	BackupSchedule  string `json:"backupSchedule,omitempty"`
 	RetentionPolicy string `json:"retentionPolicy"`
 }
 

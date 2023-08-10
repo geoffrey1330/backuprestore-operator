@@ -111,6 +111,20 @@ func (r *BackupRestoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func performBackup(backupRestore *backuprestorev1alpha1.BackupRestore) error {
+
+	// Get the backup schedule in days
+	backupScheduleDays := parseBackupSchedule(backupRestore.Spec.BackupSchedule)
+	if backupScheduleDays <= 0 {
+		return fmt.Errorf("invalid backup schedule: %s", backupRestore.Spec.BackupSchedule)
+	}
+
+	// Check if it's time to perform the backup
+	lastBackupTime := backupRestore.Status.LastBackupTime.Time
+	if time.Since(lastBackupTime).Hours() < float64(24*backupScheduleDays) {
+		fmt.Printf("Not yet time for backup. Last backup: %s\n", lastBackupTime)
+		return nil
+	}
+
 	// AWS S3 credentials and configuration
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region: aws.String("us-east-1"), // Update with your desired region
@@ -254,4 +268,19 @@ func restoreDatabase(backupContent io.ReadCloser, targetPod string) error {
 
 	fmt.Printf("Database restored on Pod: %s\n", targetPod)
 	return nil
+}
+
+func parseBackupSchedule(schedule string) int {
+	// Parse the backup schedule in days
+	// Example schedules: "daily", "weekly", "monthly"
+	switch schedule {
+	case "daily":
+		return 1
+	case "weekly":
+		return 7
+	case "monthly":
+		return 30
+	default:
+		return -1
+	}
 }
